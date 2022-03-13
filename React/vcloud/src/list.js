@@ -1,9 +1,9 @@
 import {Card, Elevation, Classes} from "@blueprintjs/core/dist/core.bundle";
 import './list.css';
-
+import '@blueprintjs/core/lib/css/blueprint-modern.css';
 function List(){
     return(
-        <Card className={Classes.PRIMARY, Classes.DARK} interactive={true} elevation={Elevation.TWO}>
+        <Card className={Classes.INTENT_PRIMARY, Classes.DARK} interactive={true} elevation={Elevation.TWO}>
             <h5>We did it!</h5>
             <p>managed to succesfully implement the frontend stack as a trial!</p>
             <div className="List">
