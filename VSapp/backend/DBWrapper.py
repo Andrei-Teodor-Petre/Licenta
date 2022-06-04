@@ -12,56 +12,57 @@ from constants import BASE_PATH
 class DBWrapper:
 
 	def __init__(self):
-		self.connPool = psycopg2.pool.SimpleConnectionPool(1,20,database="andreipetre", user='postgres', password='password', host='127.0.0.1', port='5432', options='-c search_path=vsapp,public')
+		self.connPool = psycopg2.pool.ThreadedConnectionPool(1,8,database="andreipetre", user='postgres', password='password', host='127.0.0.1', port='5432', options='-c search_path=vsapp,public')
 
 	def open(self):
-			self.conn = self.connPool.getconn()
-			self.cursor = self.conn.cursor()
+			conn = self.connPool.getconn()
+			cursor = conn.cursor()
+			return (conn, cursor)
 
-	def close(self):
-		#self.cursor.close()
-		self.connPool.putconn(self.conn)
+	def close(self, conn, cursor):
+		cursor.close()
+		self.connPool.putconn(conn)
 
 	def get_users(self):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute(''' SELECT * FROM "Users"; ''')
-			result = self.cursor.fetchall()
-			self.conn.commit()
+			cursor.execute(''' SELECT * FROM "Users"; ''')
+			result = cursor.fetchall()
+			conn.commit()
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 
 	def get_videos(self, id_user):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute(f''' 
+			cursor.execute(f''' 
 				SELECT * FROM "Videos" 
 				left join "Thumbnails" on "Thumbnails"."Id" = "Videos"."IdThumbnail"
 				left join "Users" on "Users"."Id" = "Videos"."IdUser"
 				WHERE "IdUser" = {id_user}
 			; ''')
-			result = self.cursor.fetchall()
-			self.conn.commit()
+			result = cursor.fetchall()
+			conn.commit()
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 	
 	def get_images(self, id_user):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute(f''' 
+			cursor.execute(f''' 
 				SELECT * FROM "Images" 
 				left join "Users" on "Users"."Id" = "Images"."IdUser"
 				WHERE "IdUser" = {id_user} 
 				; 
 			''')
-			result = self.cursor.fetchall()
-			self.conn.commit()
+			result = cursor.fetchall()
+			conn.commit()
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 	def get_image_address(self, id_image:int):
 		image = self.get_image(id_image)
@@ -74,31 +75,31 @@ class DBWrapper:
 		return f"{BASE_PATH}{video[1]}" 
 
 	def get_image(self, id_image:int):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute('SELECT * FROM "Images" where "Images"."Id" = '+str(id_image))
-			result = self.cursor.fetchone()
+			cursor.execute('SELECT * FROM "Images" where "Images"."Id" = '+str(id_image))
+			result = cursor.fetchone()
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 	def get_thumbnail(self, IdThumbnail:int):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute('SELECT * FROM "Thumbnails" where "Thumbnails"."Id" = '+str(IdThumbnail))
-			result = self.cursor.fetchone()
+			cursor.execute('SELECT * FROM "Thumbnails" where "Thumbnails"."Id" = '+str(IdThumbnail))
+			result = cursor.fetchone()
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 	def get_video(self, IdVideo:int):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute('SELECT * FROM "Videos" left join "Thumbnails" on "Thumbnails"."Id" = "Videos"."IdThumbnail" where "Videos"."Id" = '+str(IdVideo))
-			result = self.cursor.fetchone()
+			cursor.execute('SELECT * FROM "Videos" left join "Thumbnails" on "Thumbnails"."Id" = "Videos"."IdThumbnail" where "Videos"."Id" = '+str(IdVideo))
+			result = cursor.fetchone()
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 
 	def get_network_videos(self, id_user):
@@ -118,127 +119,125 @@ class DBWrapper:
 		return images_ids_dict
 
 	def get_images_index(self):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute('SELECT count(*) FROM "Images" ')
-			result = self.cursor.fetchone()
+			cursor.execute('SELECT count(*) FROM "Images" ')
+			result = cursor.fetchone()
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 	def get_thumbnail_index(self):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute('SELECT count(*) FROM "Thumbnails" ')
-			result = self.cursor.fetchone()
+			cursor.execute('SELECT count(*) FROM "Thumbnails" ')
+			result = cursor.fetchone()
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 	def get_videos_index(self):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute('SELECT count(*) FROM "Videos" ')
-			result = self.cursor.fetchone()
+			cursor.execute('SELECT count(*) FROM "Videos" ')
+			result = cursor.fetchone()
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 
 
 	def save_image(self, index, fileAddress, idUser, width, height, url):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute(f'''
+			cursor.execute(f'''
 			
 				INSERT INTO "Images" ("Id", "ImageAddress", "IdUser", "Height", "Width", "URL")
 				VALUES({index},'{fileAddress}',{idUser}, {height}, {width}, '{url}') 
 				RETURNING "Images"."Id";
 			
 			''' )
-			self.conn.commit()
-			result = self.cursor.fetchone()
+			conn.commit()
+			result = cursor.fetchone()
 			return result[0]
 		finally:
-			self.close()
+			self.close(conn, cursor)
 	
 
 	def save_thumbnail(self, index, thumbnail_address, thumbnail_url):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute(f'''
+			cursor.execute(f'''
 			
 				INSERT INTO "Thumbnails" ("Id", "ThumbnailAddress", "ThumbnailUrl")
 				VALUES({index},'{thumbnail_address}','{thumbnail_url}') 
 				RETURNING "Thumbnails"."Id";
 			
 			''' )
-			self.conn.commit()
-			result = self.cursor.fetchone()
+			conn.commit()
+			result = cursor.fetchone()
 			return result[0]
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 	def save_video(self, index, fileAddress, idUser, duration, width, height, url, thumbnail_id):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-
-
-
-			self.cursor.execute(f'''
+			cursor.execute(f'''
 			
 				INSERT INTO "Videos" ("Id", "ImageAddress", "IdUser", "Height", "Width", "URL")
 				VALUES({index},'{fileAddress}',{idUser}, {height}, {width}, '{url}', {thumbnail_id}) 
 				RETURNING "Images"."Id";
 			
 			''' )
-			self.conn.commit()
-			result = self.cursor.fetchone()
+			conn.commit()
+			result = cursor.fetchone()
 			return result[0]
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 
 	def delete_image(self, id_image:int):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
-			self.cursor.execute(f'''
+			cursor.execute(f'''
 			
 				DELETE FROM "Images" 
 				WHERE "Images"."Id" = {id_image};
 				RETURNING count(*) "Images"
 			
 			''' )
-			self.conn.commit()
-			result = self.cursor.fetchone()
+			conn.commit()
+			result = cursor.fetchone()
 			if result == None:
 				return "No rows deleted"
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 
 	def delete_video(self, id_thumbnail):
+		(conn, cursor) = self.open()
 		try:
-			self.open()
 
 			#we delete the thumbnail and the delete cascade deletes the video row
-			self.cursor.execute(f'''
+			cursor.execute(f'''
 			
 				DELETE FROM "Thumbnails" 
 				WHERE "Thumbnails"."Id" = {id_thumbnail} 
 				RETURNING *;
 
 			''' )
-			self.conn.commit()
-			result = self.cursor.fetchone()
+			conn.commit()
+			result = cursor.fetchone()
 			if result == None:
 				return "No rows deleted"
 			return result
 		finally:
-			self.close()
+			self.close(conn, cursor)
 		
 
 db = DBWrapper()
+#db.connPool._closeall()
 
 
 
