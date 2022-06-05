@@ -38,7 +38,8 @@ class DBWrapper:
 		(conn, cursor) = self.open()
 		try:
 			cursor.execute(f''' 
-				SELECT * FROM "Videos" 
+				SELECT "Videos"."Id", "Videos"."URL", "Thumbnails"."ThumbnailUrl", "Duration", "Username"
+				FROM "Videos" 
 				left join "Thumbnails" on "Thumbnails"."Id" = "Videos"."IdThumbnail"
 				left join "Users" on "Users"."Id" = "Videos"."IdUser"
 				WHERE "IdUser" = {id_user}
@@ -87,9 +88,10 @@ class DBWrapper:
 	def get_thumbnail_address(self, IdThumbnail:int):
 		thumbnail = self.get_thumbnail(IdThumbnail)
 		return f"{BASE_PATH}{thumbnail[1]}" 
+
 	def get_video_address(self, IdVideo:int) -> str:
 		video = self.get_video(IdVideo)
-		return f"{BASE_PATH}/{video[1]}.mov" 
+		return f"{BASE_PATH}/{video[1]}" 
 
 	def get_image(self, id_image:int):
 		(conn, cursor) = self.open()
@@ -146,8 +148,9 @@ class DBWrapper:
 		try:
 			return_json = []
 			cursor.execute(f'''
-			SELECT * FROM "Videos" 
+			SELECT "Videos"."Id", "Videos"."URL", "Thumbnails"."ThumbnailUrl", "Duration", "Username" FROM "Videos" 
 			left join "Thumbnails" on "Thumbnails"."Id" = "Videos"."IdThumbnail"
+			left join "Users" on "Users"."Id" = "Videos"."IdUser"
 			left join "VideoTagsAssociations" on "VideoTagsAssociations"."IdVideo" = "Videos"."Id" 
 			where "VideoTagsAssociations"."IdTag" = {id_tag}''')
 			result = cursor.fetchall()
@@ -158,7 +161,7 @@ class DBWrapper:
 				for j in range(len(tags_result)):
 					video_tags.append(Tag(tags_result[j][0], tags_result[j][1]).__dict__)
 
-				return_json.append( Video(result[i][0], result[i][6], result[i][10], result[i][3], video_tags).__dict__)
+				return_json.append( Video(result[i][0], result[i][1], result[i][2], result[i][3], result[i][4], video_tags).__dict__)
 
 			return return_json
 		finally:
@@ -174,7 +177,7 @@ class DBWrapper:
 			for j in range(len(tags_result)):
 				video_tags.append(Tag(tags_result[j][0], tags_result[j][1]).__dict__)
 
-			images_ids_dict.append( Video(videos[i][0], videos[i][6], videos[i][10], videos[i][3], videos[i][12],video_tags).__dict__)
+			images_ids_dict.append( Video(videos[i][0], videos[i][1], videos[i][2], videos[i][3], videos[i][4],video_tags).__dict__)
 
 		return images_ids_dict
 

@@ -124,13 +124,14 @@ def upload_video():
 		f.write(upload)
 		f.close()
 	
-	duration = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", videoAddress], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
+	processStatus = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", videoAddress], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+	duration = int(float(processStatus.stdout))
+	print(duration)
 	
 
 	#save to db
 	(thumbnail_id,width,height) = handle_video_thumbnail(index, videoAddress)
-	db.save_video(index,f"Videos/video-{str(index)}", 1, duration, width, height, f"/get_video/{str(index)}", thumbnail_id )
+	db.save_video(index,f"Videos/video-{str(index)}.mov", 1, duration, width, height, f"/get_video/{str(index)}", thumbnail_id )
 
 	#save to file structure
 	fh = open(videoAddress, "wb")
