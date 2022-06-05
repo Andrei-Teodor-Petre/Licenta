@@ -12,7 +12,7 @@ import json
 from constants import BASE_PATH, BASE_URL
 
 from PIL import Image
-
+import subprocess
 import base64
 
 from utils import get_chunk, create_thumbnail
@@ -27,6 +27,15 @@ db = DBWrapper()
 videosPath = f"{BASE_PATH}/Videos"
 imagesPath = f"{BASE_PATH}/Images"
 
+class FileManager:
+	def __init__(self, file):
+		self.file = file
+
+filePointer = io.TextIOWrapper
+
+fileMgr = FileManager(filePointer)
+
+
 @app.after_request
 def after_request(response):
 	response.headers.add('Accept-Ranges', 'bytes')
@@ -34,13 +43,14 @@ def after_request(response):
 
 @app.route("/users")
 def get_users():
+	#this needs to be rewritten -> into some auth 
 	return db.get_users()
 
 
 
-@app.route('/video/<IdVideo>')
+@app.route('/get_video/<IdVideo>')
 def get_video(IdVideo):
-
+	IdVideo = int(IdVideo)
 	video_path = db.get_video_address(IdVideo=IdVideo)
 	video_size = os.stat(video_path).st_size
 
@@ -52,20 +62,36 @@ def get_video(IdVideo):
 			groups = match.groups()
 			if groups[0]:
 				byte1 = int(groups[0])
+				#if this is 0 -> open the file as well and store the I/O pointer
+				if byte1 == 0:
+					fileMgr.file = open(video_path, 'rb')
 			if groups[1]:
 				byte2 = int(groups[1])
 	
-	chunk, start, length, file_size = get_chunk(video_path,video_size,byte1, byte2)
+	chunk, start, length, file_size = get_chunk(fileMgr.file,video_size,byte1, byte2)
 	resp = Response(chunk, 206, mimetype='video/mp4', content_type='video/mp4', direct_passthrough=True)
 
 	resp.headers.add('Content-Range', 'bytes {0}-{1}/{2}'.format(start, start + length - 1, file_size))
 	return resp
 
 
-@app.route('/get_videos')
-def get_video_library():
-	vid_lib = db.get_network_videos(1)
-	return json.dumps(vid_lib)
+
+@app.route('/get_videos/<id_user>/<id_tag>')
+def get_video_library(id_user:int,id_tag:int):
+	id_user = int(id_user)
+	id_tag = int(id_tag)
+
+	if id_tag != 0:
+		vid_lib = db.get_videos_by_tag(id_tag, id_user)
+		return json.dumps(vid_lib)
+	else:
+		vid_lib = db.get_network_videos(id_user)
+		return json.dumps(vid_lib)
+
+@app.route('/get_tags')
+def get_tags():
+	tags_dict = db.get_tags()
+	return json.dumps(tags_dict)
 
 @app.route('/get_images')
 def get_images_library():
@@ -93,11 +119,18 @@ def upload_video():
 	data_size = len(upload)
 	mimetype = file.content_type
 
-	videoAddress = f"{videosPath}/video-{str(index)}"
+	videoAddress = f"{videosPath}/video-{str(index)}.mov"
+	with open(videoAddress, 'wb') as f:
+		f.write(upload)
+		f.close()
+	
+	duration = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", videoAddress], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+	
 
 	#save to db
 	(thumbnail_id,width,height) = handle_video_thumbnail(index, videoAddress)
-	db.save_video(index,f"Videos/video-{str(index)}",1,0, width, height, f"/get_video/{str(index)}", thumbnail_id )
+	db.save_video(index,f"Videos/video-{str(index)}", 1, duration, width, height, f"/get_video/{str(index)}", thumbnail_id )
 
 	#save to file structure
 	fh = open(videoAddress, "wb")

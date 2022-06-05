@@ -6,7 +6,7 @@ from configparser import ConfigParser
 
 import cv2
 
-from Structs import Image, Video
+from Structs import Image, Tag, Video
 from constants import BASE_PATH
 
 class DBWrapper:
@@ -48,6 +48,23 @@ class DBWrapper:
 			return result
 		finally:
 			self.close(conn, cursor)
+
+	def get_tags_for_video(self, id_video, id_user):
+		(conn, cursor) = self.open()
+		try:
+
+			cursor.execute(f''' 
+				SELECT "IdTag", "Value" FROM "Videos" 
+				left join "VideoTagsAssociations" on "VideoTagsAssociations"."IdVideo" = "Videos"."Id"
+				left join "Tags" on "Tags"."Id" = "VideoTagsAssociations"."IdTag"
+				WHERE "Videos"."IdUser" = {id_user} and "Videos"."Id" = {id_video}
+				ORDER BY "IdTag"
+			; ''')
+			result = cursor.fetchall()
+			conn.commit()
+			return result
+		finally:
+			self.close(conn, cursor)
 	
 	def get_images(self, id_user):
 		(conn, cursor) = self.open()
@@ -72,12 +89,15 @@ class DBWrapper:
 		return f"{BASE_PATH}{thumbnail[1]}" 
 	def get_video_address(self, IdVideo:int) -> str:
 		video = self.get_video(IdVideo)
-		return f"{BASE_PATH}{video[1]}" 
+		return f"{BASE_PATH}/{video[1]}.mov" 
 
 	def get_image(self, id_image:int):
 		(conn, cursor) = self.open()
 		try:
-			cursor.execute('SELECT * FROM "Images" where "Images"."Id" = '+str(id_image))
+			cursor.execute(f'''
+				SELECT * FROM "Images"
+				where "Images"."Id" = {str(id_image)}
+			''')
 			result = cursor.fetchone()
 			return result
 		finally:
@@ -95,9 +115,52 @@ class DBWrapper:
 	def get_video(self, IdVideo:int):
 		(conn, cursor) = self.open()
 		try:
-			cursor.execute('SELECT * FROM "Videos" left join "Thumbnails" on "Thumbnails"."Id" = "Videos"."IdThumbnail" where "Videos"."Id" = '+str(IdVideo))
+			cursor.execute(f'''
+				SELECT * FROM "Videos" 
+				left join "Thumbnails" on "Thumbnails"."Id" = "Videos"."IdThumbnail" 
+				where "Videos"."Id" = {str(IdVideo)}
+			''')
 			result = cursor.fetchone()
 			return result
+		finally:
+			self.close(conn, cursor)
+
+	def get_tags(self):
+		(conn, cursor) = self.open()
+		try:
+			return_json = []
+			cursor.execute(f'''
+				SELECT * FROM "Tags" 
+			''')
+			result = cursor.fetchall()
+
+			for i in range(len(result)):
+				return_json.append( Tag(result[i][0], result[i][1]).__dict__)
+
+			return return_json
+		finally:
+			self.close(conn, cursor)		
+
+	def get_videos_by_tag(self, id_tag:int, id_user:int):
+		(conn, cursor) = self.open()
+		try:
+			return_json = []
+			cursor.execute(f'''
+			SELECT * FROM "Videos" 
+			left join "Thumbnails" on "Thumbnails"."Id" = "Videos"."IdThumbnail"
+			left join "VideoTagsAssociations" on "VideoTagsAssociations"."IdVideo" = "Videos"."Id" 
+			where "VideoTagsAssociations"."IdTag" = {id_tag}''')
+			result = cursor.fetchall()
+
+			for i in range(len(result)):
+				tags_result = self.get_tags_for_video(result[i][0],id_user)
+				video_tags = []
+				for j in range(len(tags_result)):
+					video_tags.append(Tag(tags_result[j][0], tags_result[j][1]).__dict__)
+
+				return_json.append( Video(result[i][0], result[i][6], result[i][10], result[i][3], video_tags).__dict__)
+
+			return return_json
 		finally:
 			self.close(conn, cursor)
 
@@ -106,7 +169,12 @@ class DBWrapper:
 		images_ids_dict = []
 		videos = self.get_videos(id_user)
 		for i in range(len(videos)):
-			images_ids_dict.append( Video(videos[i][0], videos[i][6], videos[i][10], videos[i][3]).__dict__)
+			tags_result = self.get_tags_for_video(videos[i][0],id_user)
+			video_tags = []
+			for j in range(len(tags_result)):
+				video_tags.append(Tag(tags_result[j][0], tags_result[j][1]).__dict__)
+
+			images_ids_dict.append( Video(videos[i][0], videos[i][6], videos[i][10], videos[i][3], videos[i][12],video_tags).__dict__)
 
 		return images_ids_dict
 
@@ -185,9 +253,9 @@ class DBWrapper:
 		try:
 			cursor.execute(f'''
 			
-				INSERT INTO "Videos" ("Id", "ImageAddress", "IdUser", "Height", "Width", "URL")
-				VALUES({index},'{fileAddress}',{idUser}, {height}, {width}, '{url}', {thumbnail_id}) 
-				RETURNING "Images"."Id";
+				INSERT INTO "Videos" ("Id", "VideoAddress", "IdUser", "Duration", "Height", "Width", "URL", "IdThumbnail")
+				VALUES({index},'{fileAddress}',{idUser}, {duration}, {height}, {width}, '{url}', {thumbnail_id}) 
+				RETURNING "Videos"."Id";
 			
 			''' )
 			conn.commit()
