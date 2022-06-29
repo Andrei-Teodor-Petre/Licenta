@@ -6,14 +6,18 @@ import os
 import re
 from flask import Flask, Response, flash, redirect, request, jsonify as flask_jsonnify, make_response,url_for,abort
 from flask import render_template, request, Blueprint, current_app, send_file
+from matplotlib.image import thumbnail
 from DBWrapper import DBWrapper
 from werkzeug.utils import secure_filename
 import json
-from constants import BASE_PATH, BASE_URL
+from Structs import User
+from constants import BASE_PATH, MASTER_PASSWORD
 
 from PIL import Image
 import subprocess
 import base64
+
+import uuid
 
 from utils import get_chunk, create_thumbnail
 
@@ -23,6 +27,8 @@ app.debug = True
 if __name__ == "__main__":
 	app.run(threaded=True)
 db = DBWrapper()
+
+
 
 videosPath = f"{BASE_PATH}/Videos"
 imagesPath = f"{BASE_PATH}/Images"
@@ -46,6 +52,28 @@ def get_users():
 	#this needs to be rewritten -> into some auth 
 	return db.get_users()
 
+@app.route("/connect", methods=['POST'])
+def connect():
+	username = request.form['username']
+	password = request.form['password']
+
+	if password != MASTER_PASSWORD :
+		Response("Bad server password", 500)
+
+	user = db.get_user_by_name(username=username)
+	if user != None:
+		return json.dumps(user.__dict__)
+	elif username != '':
+		#add user
+		index = db.get_table_index("Users")
+		#generate uuid token
+		user_token = uuid.uuid4()
+		db.add_user(index + 1,username, str(user_token))
+
+		user = db.get_user_by_name(username=username)
+		return json.dumps(user.__dict__)
+	else:
+		return Response("Unknown user", 500)
 
 
 @app.route('/get_video/<IdVideo>')
@@ -82,7 +110,7 @@ def get_video_library(id_user:int,id_tag:int):
 	id_tag = int(id_tag)
 
 	if id_tag != 0:
-		vid_lib = db.get_videos_by_tag(id_tag, id_user)
+		vid_lib = db.get_videos_by_tag(id_tag)
 		return json.dumps(vid_lib)
 	else:
 		vid_lib = db.get_network_videos(id_user)
@@ -98,10 +126,10 @@ def get_images_library():
 	img_lib = db.get_network_images(1)
 	return json.dumps(img_lib)
 
-@app.route('/get_image/<IdImage>')
-def get_image(IdImage):
-	filename = f"{imagesPath}/image-{IdImage}"
-	return send_file(filename, mimetype='image/gif')
+# @app.route('/get_image/<IdImage>')
+# def get_image(IdImage):
+# 	filename = f"{imagesPath}/image-{IdImage}"
+# 	return send_file(filename, mimetype='image/gif')
 
 @app.route('/get_thumbnail/<IdImage>')
 def get_thumbnail(IdImage):
@@ -111,8 +139,12 @@ def get_thumbnail(IdImage):
 
 @app.route('/up_video', methods=['POST'])
 def upload_video():
-	index = db.get_videos_index()
-	index = index[0]+1
+	index = db.get_table_index("Videos")
+	index = index+1
+
+	user = request.form['user']
+	token = request.form['Authorization']
+
 
 	file = request.files['file']
 	upload = file.read()
@@ -131,7 +163,15 @@ def upload_video():
 
 	#save to db
 	(thumbnail_id,width,height) = handle_video_thumbnail(index, videoAddress)
-	db.save_video(index,f"Videos/video-{str(index)}.mov", 1, duration, width, height, f"/get_video/{str(index)}", thumbnail_id )
+
+	user_id = db.get_username_id(user)
+	if user_id == None:
+		#make a new user
+		index = db.get_table_index("Users")
+		db.add_user(index + 1,user)
+		db.save_video(index,f"Videos/video-{str(index)}.mov", index + 1, duration, width, height, f"/get_video/{str(index)}", thumbnail_id, data_size )
+
+	db.save_video(index,f"Videos/video-{str(index)}.mov", user_id, duration, width, height, f"/get_video/{str(index)}", thumbnail_id, data_size )
 
 	#save to file structure
 	fh = open(videoAddress, "wb")
@@ -140,9 +180,40 @@ def upload_video():
 
 	return Response(None, 200)
 
+@app.route('/update_video_tags/<id_video>/<id_user>', methods=['POST'])
+def update_video_tags(id_video: int, id_user: int):
+
+	outdated_video_tags_list = db.get_tags_for_video(id_video)
+	outdated_tags = {}
+	for tag in outdated_video_tags_list:
+		outdated_tags[int(tag['id'])] = tag['value']
+	new_tags = {}
+	for key, val in request.form.items():
+		#first add all the tags that don't exist
+		id_tag = db.get_tag_id(val)
+		if id_tag == None:
+			#create new tag
+			id_new_tag = db.add_tag(val)
+			new_tags[id_new_tag] = val
+		elif id_tag in outdated_tags.keys():
+			del outdated_tags[id_tag]
+		else:
+			new_tags[key] = val		
+	#at this point in outdated_video_tags there are the tags that have been removed
+	for id_tag, _ in outdated_tags.items():
+		db.remove_tag_association(id_tag,id_video)
+
+	for key, val in new_tags.items():
+		db.add_tag_association(val, id_video)
+
+	video_tags = db.get_tags_for_video(id_video)
+	return json.dumps(video_tags)
+	
+
+
 @app.route('/up_image', methods=['POST'])
 def upload_image():
-	index = db.get_images_index()[0] + 1
+	index = db.get_table_index("Images") + 1
 
 	file = request.files['file']
 	upload = file.read()
@@ -178,7 +249,35 @@ def delete_image(id_image):
 
 @app.route('/delete_video/<id_video>')
 def delete_video(id_video):
-	video = db.get_video(id_video)
-	id_thumbnail = video[8]
-	db.delete_video(id_thumbnail=id_thumbnail)
+	try:
+
+		video = db.get_video(id_video)
+		id_thumbnail = video[0]
+		video_address = video[1]
+		thumbnail_address = video[11]
+
+		#video_tags = db.get_tags_for_video(id_video)
+
+		#set the on delete cascade for this
+		# for tag in video_tags:
+		# 	db.remove_tag_association(tag['id'],id_video)
+		tags = db.get_tags_for_video(id_video)
+		
+
+		db.delete_video(id_thumbnail=id_thumbnail)
+		os.remove(f'{BASE_PATH}/{video_address}')
+		os.remove(f'{BASE_PATH}{thumbnail_address}')
+
+
+		for tag in tags:
+			db.check_remove_tag(tag['id'])
+
+		return Response(None, 200)
+	except Exception as err:
+		print(err)
+		return Response(None, 500)
+	
+
+
+	
 
