@@ -27,8 +27,10 @@ class Image():
 		self.url = url
 
 class User:
-	def __init__(self, id, username, token):
+	def __init__(self, id, username, password, role, token):
 		self.id = id
 		self.name = username
+		self.password = password
+		self.role = role
 		self.token = token
 		

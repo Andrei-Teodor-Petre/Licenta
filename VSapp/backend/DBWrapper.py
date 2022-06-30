@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone
 from pickle import NONE
 from typing import final
 import uuid
+from warnings import catch_warnings
 from matplotlib import image
 import psycopg2
 from psycopg2 import pool
@@ -67,10 +68,10 @@ class DBWrapper:
 				if result[5] != None: 
 					token = result[5]
 				else:
-					token = uuid.uuid4()
-					self.update_user_token(result[0],token.hex)
+					token = uuid.uuid4().hex
+					self.update_user_token(result[0],token)
 
-				return_val = User(result[0],result[1],token.hex)
+				return_val = User(result[0], result[1], result[2], result[4], token)
 				return return_val
 			else:
 				return None
@@ -83,15 +84,16 @@ class DBWrapper:
 			cursor.execute(f''' UPDATE "Users"
                 SET "Token" = '{token}'
                 WHERE "Id" = {user_id}; ''')
+			conn.commit()
 		finally:
 			self.close(conn, cursor)
 
-	def add_user(self, index:int, username: Str, token: Str):
+	def add_user(self, index:int, username: Str,password:Str, token: Str):
 		(conn, cursor) = self.open()
 		try:
 			cursor.execute(f''' 				
 				INSERT INTO "Users" ("Id", "Username", "Password", "Email", "Role", "Token")
-				VALUES({index},'{username}','{username}','{username}', {2}, ) 
+				VALUES({index},'{username}','{password}','{username}', {2}, '{token}') 
 				RETURNING "Users"."Id"; 
 			''')
 			
@@ -122,8 +124,24 @@ class DBWrapper:
 			self.close(conn, cursor)
 
 	def delete_user(self, username:Str):
-		print(username)
+		print('this works ' + username)
 		pass
+
+	def set_user_level(self, username, level):
+		(conn, cursor) = self.open()
+		try:
+			print(username)
+			cursor.execute(f''' 
+				UPDATE "Users"
+				set "Role" = {level}
+				where "Username" = '{username}'
+			''')
+			conn.commit()
+
+		except Exception as err:
+			print(err)
+		finally:
+			self.close(conn, cursor)		
 
 
 
