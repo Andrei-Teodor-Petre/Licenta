@@ -1,4 +1,4 @@
-from crypt import methods
+
 from email.header import Header
 from http.client import OK
 import io
