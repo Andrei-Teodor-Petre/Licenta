@@ -4,17 +4,13 @@ from http.client import OK
 import io
 import os
 import re
-from flask import Flask, Response, flash, redirect, request, jsonify as flask_jsonnify, make_response,url_for,abort
-from flask import render_template, request, Blueprint, current_app, send_file
-from matplotlib.image import thumbnail
+from flask import Flask, Response, request, send_file
 from DBWrapper import DBWrapper
-from werkzeug.utils import secure_filename
 import json
 from constants import BASE_PATH, MASTER_PASSWORD
 
 from PIL import Image
 import subprocess
-import base64
 
 import uuid
 
