@@ -3,8 +3,7 @@ from datetime import date, datetime, timezone
 from pickle import NONE
 import uuid
 import psycopg2
-
-import cv2
+from psycopg2 import pool
 
 from Structs import Image, Tag, User, Video
 from constants import BASE_PATH
@@ -12,7 +11,8 @@ from constants import BASE_PATH
 class DBWrapper:
 
 	def __init__(self):
-		self.connPool = psycopg2.pool.ThreadedConnectionPool(1,8,database="andreipetre", user='postgres', password='password', host='127.0.0.1', port='5432', options='-c search_path=vsapp,public')
+		#self.connPool = psycopg2.pool.ThreadedConnectionPool(1,8,database="andreipetre", user='postgres', password='password', host='127.0.0.1', port='5432', options='-c search_path=vsapp,public')
+		self.connPool = psycopg2.pool.ThreadedConnectionPool(1,8,database="postgres", user='postgres', password='asscb7799', host='127.0.0.1', port='5432', options='-c search_path=vsapp,public')
 
 	def open(self):
 			conn = self.connPool.getconn()
